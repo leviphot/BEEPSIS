@@ -327,7 +327,7 @@ function [par, err, CM, fval] = fit_likehood(sfun, init, NX, abs_from_endc, minm
     CM = inv(hessian);
     
     dc   = sqrt(diag(CM));
-    err  = (dc) .* tinvl(1-0.95/2,vv);
+    err  = (dc) .* tinv(1-0.95/2,vv);
     
     dc    = diag(1./dc);
     CM = dc*CM*dc; %#ok<MINV>
