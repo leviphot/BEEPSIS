@@ -1,7 +1,10 @@
 # BEEPSIS: Bayes estimation of experimental parameters in stochastic inertial systems
 
 Functions in BEPPESIS package (beeepsis.m, beepsis_bin.m, and beepsis_ndbin.m) estimate the parameters influencing motion of a particle(s) in inertial system with random force. One can estimate the force profile, damping coefficient as well as the temperature of surrounding medium using a position only record of the particle trajectory. 
-For details see ***REFERENCE HERE***
+
+For details and examples of usage see https://arxiv.org/abs/2212.14043
+
+Please note that the resulting "force" is normalized by particle mass while the "effective temperature" is given relative to $k_B T_{\mathrm{ref}}/m$ (where $T_{\mathrm{ref}}$ is some reference temperature and $m$ is particle mass).
 
 ## Installation
 
