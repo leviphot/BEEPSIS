@@ -11,7 +11,7 @@ function res = beepsis(data, dt, fun, init, Gamma, kBT_m, methods, sigmax)
 %            parcile is in x0
 %            function must accept arguments in a shape fun(par, x)
 %               where par is a vector of parameters (same size as init)
-%               and x is a vector (!D case) or matrix for multidimensional case
+%               and x is a vector (1D case) or matrix for multidimensional case
 %   init     initialization guess of the normalized force profile parametrization
 %            should be row vector
 %            if init is colum or matrix then minimization is performed for each row as
@@ -42,15 +42,15 @@ function res = beepsis(data, dt, fun, init, Gamma, kBT_m, methods, sigmax)
 %                    minimization for force, damping and temperature fixed
 %               'c'  position only dependent PDF (Eqs. 7-11)
 %                    minimization for force, damping and temperature fixed 
-%               'C'  same as small 'c'
+%               'C'  position only dependent PDF (Eqs. 7-11)
 %                    minimization for force and damping, T fixed
-%               'G'  same as small 'c'
+%               'G'  position only dependent PDF (Eqs. 7-11)
 %                    minimization for damping only, force and T fixed
-%               'T'  same as small 'c'
+%               'T'  position only dependent PDF (Eqs. 7-11)
 %                    minimization for damping and temperaure, force fixed
-%               'A'  same as 'c' 
+%               'A'  position only dependent PDF (Eqs. 7-11)
 %                    minimization for force, damping and T
-%             the combinantion of optional number and one of above
+%             the combination of optional number and one of above
 %               mentioned letters define a chain of consequent
 %               minimizations with output of previous entering as an input
 %               to the next one
@@ -316,7 +316,6 @@ function [par, err, CM, fval] = fit_likehood(sfun, init, NX, abs_from_endc, minm
         options = optimoptions(@ga,'Display','off', 'UseParallel', logical(useparallel));
         
         par = ga(sfun, numel(par), [],[],[],[],lb, ub, [], options);
-        hessian = [];
     end
     if isempty(hessian)
         hessian = numhessian(sfun, par);
@@ -343,7 +342,6 @@ end
 
 
 function r = gsumfun_v(p, GM, x1, x0, xm1, fun, dt, kBT_m, sigma)
-    A1 = numel(x0)/2;
     B  = kBT_m*2;
     
     GM    = abs(GM);
@@ -352,15 +350,19 @@ function r = gsumfun_v(p, GM, x1, x0, xm1, fun, dt, kBT_m, sigma)
     M1EGT = -expm1(-GT);
     
     D  = -expm1(-2*GT);
-    if sigma > 0
-        D = D + expm1(-GT).^2 *sigma^2;
-    end
     vec = ((x1-x0)/dt - (x0-xm1)/dt*EGT - fun(p, x0)/GM*M1EGT).^2;
-    r =   A1*log(pi*B*D) + 1/B/D .* sum(vec, 'all');
+    
+    if any(sigma > 0)        
+        D = D + expm1(-GT).^2 *sigma.^2;
+    end   
+    if numel(D) == 1
+        r = numel(x0)/2*log(pi*B*D) + 1/B/D .* sum(vec, 'all');
+    else
+        r = size(x0,1)/2*log(pi*B*sum(D)) + 1/B * sum(vec./D, 'all');
+    end
 end
 
 function r = gsumfun_p(p, GM, x1, x0, xm1, fun, dt, kBT_m, sigma)
-    A1    =  numel(x0)/2;
     B     = kBT_m*2; 
     GM    = abs(GM);
     GT    = GM*dt;
@@ -370,12 +372,18 @@ function r = gsumfun_p(p, GM, x1, x0, xm1, fun, dt, kBT_m, sigma)
     else
         D = 2*GT + 4*expm1(-GT) - expm1(-2*GT);
     end
-    if sigma > 0
-        D = D + expm1(-GT).^2 *sigma^2;
-    end
-    D = D / GM^2;
+    
     vec = (x1-x0 - (x1-xm1)/2/GT*M1EGT - fun(p, x0)/GM^2*(GT - M1EGT)).^2;
-    r =   A1*log(pi*B*D) + 1/B/D .* sum(vec, 'all');
+    
+    if any(sigma > 0)        
+        D = D + expm1(-GT).^2 *sigma.^2;
+    end   
+    D = D / GM^2;
+    if numel(D) == 1
+        r = numel(x0)/2*log(pi*B*D) + 1/B/D .* sum(vec, 'all');
+    else
+        r = size(x0,1)/2*log(pi*B*sum(D)) + 1/B * sum(vec./D, 'all');
+    end
 end
 
 
@@ -400,29 +408,33 @@ function r = gsumfun_c(p, GM, x1, x0, xm1, fun, dt, kBT_m, sigma)
     D0 = D0 / GM^2 * GT^3;
     vec = x1 - x0 * (1+EGT) + xm1 * EGT - fun(p, x0)/GM^2 * GT*M1EGT;
 
-    N = numel(vec);
+    N = size(vec,1);
 
     if any(sigma > 0)
         C = zeros(3, N);
-        fder = 0;
+        fdersum = 0;
+        fderdiag = zeros(size(vec));
         if numel(sigma) == 1
             sigma = sigma*ones(DIMS,1);
         end
         for kk = 1:DIMS
             deltax = zeros(1, DIMS);
             deltax(kk) = sigma(kk)/10;            
-            fder = fder + (fun(p, x0 + deltax) - fun(p, x0 - deltax))/2/deltax(kk);            
+            % fder, fderdiag,fdersum
+            fder = (fun(p, x0 + deltax) - fun(p, x0 - deltax))/2/deltax(kk) / GM^2 * GT*M1EGT;            
+            fderdiag(:,kk) = fder(:,kk);
+            
+            fdersum = fdersum + fder.^2.*sigma(kk)^2;            
         end
-        fder = fder / GM^2 * GT*M1EGT;
         
         Q = 0;
         logdetCC = 0;
         for kk = 1:DIMS
-            C(1,:)       = D1 + sigma(kk)^2/D0 * (2 + 2*EGT + 2*EGT2 + 2*(1+EGT)*fder(:,kk) + fder(:,kk).^2);        
-            C(2,1:end-1) = D2 - sigma(kk)^2/D0 * ((1+EGT)^2 + fder(1:end-1, kk) + fder(2:end, kk));
+            C(1,:)       = D1 + sigma(kk)^2/D0 * 2 * (1 + EGT + EGT2 + (1+EGT)*fderdiag(:,kk)) + 1/D0*fdersum(:,kk);        
+            C(2,1:end-1) = D2 - sigma(kk)^2/D0 * ((1+EGT)^2 + fderdiag(1:end-1, kk)*EGT + fderdiag(2:end, kk));
             C(3,1:end-2) =      sigma(kk)^2/D0 * EGT;
-            [QQ, ldC] = solveBeepsisArg(C, vec);
-
+            
+            [QQ, ldC] = solveBeepsisArg(C, vec(:,kk));            
             logdetCC = logdetCC + ldC;
             Q = Q  + QQ;
         end
@@ -431,9 +443,11 @@ function r = gsumfun_c(p, GM, x1, x0, xm1, fun, dt, kBT_m, sigma)
         C(1,:)       = D1;        
         C(2,1:end-1) = D2;
         [Q, logdetCC] = solveBeepsisArg(C, vec);
+        logdetCC = logdetCC * DIMS;
+        Q        = sum(Q);
     end
                
-    r =   0.5*( N*log(D0*2*pi) + logdetCC + 1/D0 .* Q);
+    r =   0.5*( N*DIMS*log(D0*2*pi) + logdetCC + 1/D0 .* Q);
 end
 
 
