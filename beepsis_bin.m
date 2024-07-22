@@ -65,8 +65,8 @@ end
 if numel(bins) == 1
     bins = floor(bins);
     bins = linspace(mindata, maxdata, bins+1);
-    bins(1)   = bins(1)   -  eps(1);
-    bins(end) = bins(end) +  eps(1);
+    bins(1)   = bins(1)   -  10*eps(1);
+    bins(end) = bins(end) +  10*eps(1);
     nbin = zeros(numel(bins)-1,1);
     for kk = 1:numel(nbin)
         ii = data>bins(kk) & data<=bins(kk+1);
@@ -142,6 +142,7 @@ end
 
 res.bincenter = bincntr;
 res.binedges  = bins;
+res.bincount  = nbin;
 
 
 if any(methods == 'v') % Eq (B1)
